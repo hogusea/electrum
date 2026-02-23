@@ -60,6 +60,8 @@ info "Building $pkgname..."
                 --with-x=no \
                 --enable-video=no \
                 --with-jpeg=no"
+            # On newer macOS runners (arm64), iconv might not be auto-linked.
+            export LIBS="${LIBS:-} -liconv"
         else
             # linux target
             AUTOCONF_FLAGS="$AUTOCONF_FLAGS \
