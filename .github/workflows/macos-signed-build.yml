@@ -47,25 +47,33 @@ jobs:
           KEYCHAIN_PASSWORD="temp_keychain_password"
           CERT_PATH="$RUNNER_TEMP/codesign.p12"
 
+          # Normalize secrets to avoid accidental whitespace/newline copy-paste issues.
+          P12_B64="$(printf '%s' "$MACOS_CERT_P12_BASE64" | tr -d '[:space:]')"
+          P12_PASS="$(printf '%s' "$MACOS_CERT_P12_PASSWORD" | tr -d '\r\n')"
+          echo "MACOS_CERT_P12_BASE64 length (normalized): ${#P12_B64}"
+
           # Decode secret and verify it is a real PKCS#12 container before import.
-          printf '%s' "$MACOS_CERT_P12_BASE64" | tr -d '\r' | base64 --decode > "$CERT_PATH" || {
-            echo "Invalid MACOS_CERT_P12_BASE64: base64 decode failed."
-            exit 1
-          }
+          if ! printf '%s' "$P12_B64" | base64 --decode > "$CERT_PATH" 2>/dev/null; then
+            if ! printf '%s' "$P12_B64" | base64 -D > "$CERT_PATH" 2>/dev/null; then
+              echo "Invalid MACOS_CERT_P12_BASE64: base64 decode failed."
+              exit 1
+            fi
+          fi
           if [ ! -s "$CERT_PATH" ]; then
             echo "Decoded certificate file is empty."
             exit 1
           fi
-          openssl pkcs12 -in "$CERT_PATH" -passin pass:"$MACOS_CERT_P12_PASSWORD" -nokeys -info -noout >/dev/null 2>&1 || {
+          echo "Decoded PKCS#12 file size: $(wc -c < "$CERT_PATH") bytes"
+          if ! openssl pkcs12 -in "$CERT_PATH" -passin pass:"$P12_PASS" -nokeys -info -noout; then
             echo "Invalid PKCS#12 or wrong MACOS_CERT_P12_PASSWORD."
             echo "Make sure MACOS_CERT_P12_BASE64 is generated from a .p12 export (not .cer)."
             exit 1
-          }
+          fi
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$MACOS_CERT_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASS" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
