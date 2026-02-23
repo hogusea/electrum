@@ -30,7 +30,7 @@ RESULT=$(xcrun notarytool submit \
     --password "$APPLE_ID_PASSWORD" \
     --output-format plist \
     --wait \
-    --timeout 10m \
+    --timeout 30m \
     "${APP_BUNDLE}.zip"
 )
 
